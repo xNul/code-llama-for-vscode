@@ -3,10 +3,10 @@
 An API which mocks [llama.cpp](https://github.com/ggerganov/llama.cpp) to enable support for Code Llama with the
 [Continue Visual Studio Code extension](https://continue.dev/).
 
-As of the time of writing this is the only way to use Code Llama with VSCode locally without having to sign up or get
-an API key for a service. The only exception to this is Continue with [Ollama](https://ollama.ai/), but Ollama doesn't
-support Windows or Linux. On the other hand, Code Llama for VSCode is completely cross-platform and will run wherever
-Meta's own [codellama](https://github.com/facebookresearch/codellama) code will run.
+As of the time of writing and to my knowledge, this is the only way to use Code Llama with VSCode locally without having
+to sign up or get an API key for a service. The only exception to this is Continue with [Ollama](https://ollama.ai/), but
+Ollama doesn't support Windows or Linux. On the other hand, Code Llama for VSCode is completely cross-platform and will
+run wherever Meta's own [codellama](https://github.com/facebookresearch/codellama) code will run.
 
 Now let's get started!
 
