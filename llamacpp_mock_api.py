@@ -14,6 +14,7 @@ def main(
     max_seq_len: int = 512,
     max_batch_size: int = 8,
     max_gen_len: Optional[int] = None,
+    port: int = 8000,
 ):
     # Create our Code Llama object.
     generator = Llama.build(
@@ -96,7 +97,7 @@ def main(
             return "onesix" + jsonify({"choices": [{"delta": {"role": "assistant", "content": response}}]}).get_data(as_text=True)
 
         # Run the Flask API server.
-        app.run(port=8000)
+        app.run(port=port)
     
     # Nodes which are not node 0 wait for tasks.
     else:
