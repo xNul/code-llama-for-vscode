@@ -30,3 +30,5 @@ torchrun --nproc_per_node 1 llamacpp_mock_api.py \
 3. Type `/config` in VSCode with Continue and make changes to `config.py` so it looks like [this](https://continue.dev/docs/customization#local-models-with-ggml).
 
 Restart VSCode or reload the Continue extension and you should now be able to use Code Llama for VSCode!
+
+**TODO: Response streaming**

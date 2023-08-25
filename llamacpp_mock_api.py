@@ -1,7 +1,7 @@
 from typing import Optional
 
 import fire
-from flask import Flask, redirect, url_for, jsonify, request
+from flask import Flask, jsonify, request
 import torch.distributed as dist
 
 from llama import Llama
@@ -28,13 +28,41 @@ def main(
     # and we will use it to control the rest.
     if dist.get_rank() == 0:
         app = Flask(__name__)
+        
+        def run_chat_completion(instructions):
+            # Broadcast what should be processed to other nodes (acting as a C&C node).
+            dist.broadcast_object_list([instructions, max_gen_len, temperature, top_p])
+
+            # Start Code Llama inferencing.
+            results = generator.chat_completion(
+                instructions,
+                max_gen_len=max_gen_len,
+                temperature=temperature,
+                top_p=top_p,
+            )
+
+            # Send the response back.
+            return results[0]["generation"]["content"].strip()
 
         @app.route("/v1/completions", methods=["POST"])
         def completions():
-            # Would be used by Continue to generate a relevant title corresponding
-            # to the model's response, however, the current prompt passed by Continue
-            # is not good at obtaining a title from Code Llama so we hardcode a generic title.
-            response = "Code Llama"
+            content = request.json
+            
+            # Is used by Continue to generate a relevant title corresponding to the
+            # model's response, however, the current prompt passed by Continue is not
+            # good at obtaining a title from Code Llama's completion feature so we
+            # use chat completion instead.
+            messages = [
+                {
+                    "role": "user",
+                    "content": content["prompt"]
+                }
+            ]
+            
+            # Perform Code Llama chat completion.
+            response = run_chat_completion([messages])
+            
+            # Send back the response.
             return jsonify({"choices": [{"text": response}]})
 
         @app.route("/v1/chat/completions", methods=["POST"])
@@ -59,24 +87,15 @@ def main(
             for element in remove_elements:
                 messages.pop(element)
 
-            # Broadcast what should be processed to other nodes (acting as a C&C node).
-            dist.broadcast_object_list([[messages], max_gen_len, temperature, top_p])
-
-            # Start Code Llama inferencing
-            results = generator.chat_completion(
-                [messages],
-                max_gen_len=max_gen_len,
-                temperature=temperature,
-                top_p=top_p,
-            )
+            # Perform Code Llama chat completion.
+            response = run_chat_completion([messages])
 
             # Send JSON with Code Llama's response back to the VSCode Continue
             # extension. Note the extension expects six characters preappended to the
             # reponse JSON so we preappend the random string "onesix" to fulfill that requirement.
-            response = results[0]["generation"]["content"].strip()
             return "onesix" + jsonify({"choices": [{"delta": {"role": "assistant", "content": response}}]}).get_data(as_text=True)
 
-        # Run the Flask API server
+        # Run the Flask API server.
         app.run(port=8000)
     
     # Nodes which are not node 0 wait for tasks.
