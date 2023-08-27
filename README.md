@@ -22,10 +22,9 @@ Steps:
 1. Move `llamacpp_mock_api.py` to your [`codellama`](https://github.com/facebookresearch/codellama) folder and install Flask to your environment with `pip install flask`.
 2. Run `llamacpp_mock_api.py` with your [Code Llama Instruct torchrun command](https://github.com/facebookresearch/codellama#fine-tuned-instruction-models). For example:
 ```
-torchrun --nproc_per_node 1 llamacpp_mock_api.py \
-    --ckpt_dir CodeLlama-7b-Instruct/ \
-    --tokenizer_path CodeLlama-7b-Instruct/tokenizer.model \
-    --max_seq_len 512 --max_batch_size 4
+python llamacpp_mock_api.py
+    --model_id codellama/CodeLlama-13b-Instruct-hf \
+    --max_seq_len 512
 ```
 3. Type `/config` in VSCode with Continue and make changes to `config.py` so it looks like [this](https://continue.dev/docs/customization#local-models-with-ggml).
 
