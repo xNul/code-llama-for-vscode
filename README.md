@@ -1,6 +1,6 @@
 # Code Llama for VSCode
 
-An API which mocks [llama.cpp](https://github.com/ggerganov/llama.cpp) to enable support for Code Llama with the
+An API which mocks [Llama.cpp](https://github.com/ggerganov/llama.cpp) to enable support for Code Llama with the
 [Continue Visual Studio Code extension](https://continue.dev/).
 
 As of the time of writing and to my knowledge, this is the only way to use Code Llama with VSCode locally without having
@@ -27,8 +27,6 @@ torchrun --nproc_per_node 1 llamacpp_mock_api.py \
     --tokenizer_path CodeLlama-7b-Instruct/tokenizer.model \
     --max_seq_len 512 --max_batch_size 4
 ```
-3. Type `/config` in VSCode with Continue and make changes to `config.py` so it looks like [this](https://continue.dev/docs/customization#local-models-with-ggml).
+3. Click the settings button at the bottom right of Continue's UI in VSCode and make changes to `config.json` so it looks like [this](https://docs.continue.dev/reference/Model%20Providers/llamacpp)[<sup>\[archive\]</sup>](http://web.archive.org/web/20240531162330/https://docs.continue.dev/reference/Model%20Providers/llamacpp). Replace `MODEL_NAME` with `codellama-7b`.
 
 Restart VSCode or reload the Continue extension and you should now be able to use Code Llama for VSCode!
-
-**TODO: Response streaming**

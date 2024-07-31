@@ -1,7 +1,7 @@
 from typing import Optional
 
 import fire
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 import torch.distributed as dist
 
 from llama import Llama
@@ -14,8 +14,10 @@ def main(
     max_seq_len: int = 512,
     max_batch_size: int = 8,
     max_gen_len: Optional[int] = None,
-    port: int = 8000,
+    port: int = 8080,
 ):
+    print("Loading Code Llama...", end="", flush=True)
+
     # Create our Code Llama object.
     generator = Llama.build(
         ckpt_dir=ckpt_dir,
@@ -23,6 +25,9 @@ def main(
         max_seq_len=max_seq_len,
         max_batch_size=max_batch_size,
     )
+    
+    print("Done!", flush=True)
+    print()
 
     # With torchrun and distributed PyTorch, multiple copies of this code
     # can be run at once. We only want one of them (node 0) to have the Flask API
@@ -30,7 +35,38 @@ def main(
     if dist.get_rank() == 0:
         app = Flask(__name__)
         
-        def run_chat_completion(instructions):
+        def prompt_to_instructions(prompt):
+            # Remove unnecessary tokens and spacing from Continue's prompt format.
+            prompt = prompt.replace("</s>\n<s>", "")
+            prompt = prompt.replace("[INST] ", "[INST]")
+            prompt = prompt.replace(" [/INST]", "[/INST]")
+
+            # Consume Continue's prompt string and transform it into a list of
+            # message dicts which contain role information.
+            messages = []
+            prompt_start = 0
+            while True:
+                user_message_start = prompt.find("[INST]", prompt_start) + 6
+                user_message_end = prompt.find("[/INST]", prompt_start)
+                assistant_message_end = prompt.find("[INST]", user_message_end)
+                
+                messages += [{"role": "user", "content": prompt[user_message_start:user_message_end]}]
+                
+                if assistant_message_end != -1:
+                    messages += [{"role": "assistant", "content": prompt[user_message_end + 7:assistant_message_end]}]
+                else:
+                    break
+
+                prompt_start = assistant_message_end
+            
+            # Send back the message instructions.
+            return [messages]
+
+        def run_chat_completion(prompt):
+            # Transform the prompt format Continue uses into a list of
+            # message dicts Code Llama supports.
+            instructions = prompt_to_instructions(prompt)
+            
             # Broadcast what should be processed to other nodes (acting as a C&C node).
             dist.broadcast_object_list([instructions, max_gen_len, temperature, top_p])
 
@@ -41,62 +77,33 @@ def main(
                 temperature=temperature,
                 top_p=top_p,
             )
-
+            
             # Send the response back.
             return results[0]["generation"]["content"].strip()
 
-        @app.route("/v1/completions", methods=["POST"])
-        def completions():
+        @app.route("/completion", methods=["POST"])
+        def completion():
             content = request.json
             
-            # Is used by Continue to generate a relevant title corresponding to the
-            # model's response, however, the current prompt passed by Continue is not
-            # good at obtaining a title from Code Llama's completion feature so we
-            # use chat completion instead.
-            messages = [
-                {
-                    "role": "user",
-                    "content": content["prompt"]
-                }
-            ]
+            print("Incoming request: " + str(content))
             
             # Perform Code Llama chat completion.
-            response = run_chat_completion([messages])
+            response = run_chat_completion(content["prompt"])
+            response = jsonify({"content": response}).get_data(as_text=True)
+            
+            print("Outgoing response: " + str(response))
+            
+            # Llama.cpp's HTTP server uses Server-Sent Events to stream results to the client
+            # so we reimplement it here, for a single event sent to Continue which contains
+            # the entire Code Llama response.
+            def generate():
+                yield "data: " + response + "\n"
+                yield "data: [DONE]\n"
             
             # Send back the response.
-            return jsonify({"choices": [{"text": response}]})
+            return Response(generate())
 
-        @app.route("/v1/chat/completions", methods=["POST"])
-        def chat_completions():
-            content = request.json
-            messages = content["messages"]
-            
-            # Continue does not follow the user-assistant turn constraints Code Llama
-            # needs. It has duplicate subsequent responses for a role. For example, a/u/u/a
-            # will be sent by Continue when Code Llama only supports u/a/u/a so we squash
-            # duplicate subsequent roles into a single message.
-            if messages[0]["role"] == "assistant":
-                messages[0]["role"] = "system"
-            last_role = None
-            remove_elements = []
-            for i in range(len(messages)):
-                if messages[i]["role"] == last_role:
-                    messages[i-1]["content"] += "\n\n" + messages[i]["content"]
-                    remove_elements.append(i)
-                else:
-                    last_role = messages[i]["role"]
-            for element in remove_elements:
-                messages.pop(element)
-
-            # Perform Code Llama chat completion.
-            response = run_chat_completion([messages])
-
-            # Send JSON with Code Llama's response back to the VSCode Continue
-            # extension. Note the extension expects six characters preappended to the
-            # reponse JSON so we preappend the random string "onesix" to fulfill that requirement.
-            return "onesix" + jsonify({"choices": [{"delta": {"role": "assistant", "content": response}}]}).get_data(as_text=True)
-
-        # Run the Flask API server.
+        # Run the Flask API server on the Llama.cpp port.
         app.run(port=port)
     
     # Nodes which are not node 0 wait for tasks.
